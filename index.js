@@ -34,7 +34,22 @@ let total_path_length = []
 let success_rate = [];
 let path_count = 0;
 
+//NEW EVALUATION METRICS FOR CAT TRAINING
+let testing_timeout_rate = []
+let testing_mouse_caught_rate = []
+let testing_mouse_escape_rate = []
+let testing_timeout_rewards = []
+let testing_mouse_caught_rewards = []
+let testing_mouse_escape_rewards = []
+let timeout_rate = 0;
+let mouse_caught_rate = 0;
+let mouse_escape_rate = 0;
+let timeout_rewards = 0;
+let mouse_caught_rewards = 0;
+let mouse_escape_rewards = 0;
+
 let show_rewards = false;
+let show = false;
 
 // Declare numCats as a global variable
 window.numCats = numCats;
@@ -335,6 +350,7 @@ class Cat {
     this.movement_in_progress = false;
     this.my_velocity = VELOCITY;
     // this.update_iteration = 0;
+    this.path_iterations = 0;
     this.path_iterations = 0;
     this.future_row = -1;
     this.future_col = -1;
@@ -728,16 +744,11 @@ console.log(TIMEOUT_CUTOFF);
 console.log(pathLengthMatrix);
 
 //RL PARAMETERS -----------------------------------------------------------------------------
-const KEEP_DISTANCE_EXIT_ATTEMPT = max_distance  //maintain distance from cat AND get closer to exit
-const KEEP_DISTANCE = max_distance / 2  //maintain distance from cat AND get further/maintain distance from exit
-const ESCAPE_ATTEMPT = max_distance   //mouse gets closer to cat, exit gets closer to mouse, exit is closer to mouse than cat is to mouse
-const CAUGHT = -max_distance * 3
-const ESCAPE = max_distance * 3
 let epsilon = 0.9 //0.9
-let EPS_DECAY = 0.9998666;  //0.9998;   //fast decay   //0.9998;
+let EPS_DECAY = 0.9998666;  //0.999925 //0.9998666;  //0.9998;   //fast decay   //0.9998;
 const LEARNING_RATE = 0.1
 const DISCOUNT = 0.95;
-let EPISODES = 0;0
+let EPISODES = 0;
 let TESTING_EPISODES = 0;
 let num_moves;
 //-----------------------------------------------------------------------------
@@ -873,11 +884,13 @@ const directions = [0, 1, 2, 3]; // Possible directions for the cat
 let extendedStateSpaceMapping = {};
 let stateIndex = 0;
 
+let meesa_coount = 0;
 
 // Iterate through the grid to define the state space
 for (let row = 1; row < map.length - 1; row++) {
     for (let col = 1; col < map[row].length - 1; col++) {
         if (map[row][col] === ' ') {
+            meesa_coount += 1;
             let possibleMouseDirections = [];
             if (map[row - 1][col] === ' ') { // Check for wall above
                 possibleMouseDirections.push(0); // Cat can come from 'up'
@@ -903,6 +916,8 @@ for (let row = 1; row < map.length - 1; row++) {
         }
     }
 }
+console.log("meesa coutn is");
+console.log(meesa_coount);
 
 // Function to get the state index
 function getCatStateIndex(row, col, catDirection, mouseCatDistance, mouseExitDirection) {
@@ -986,7 +1001,7 @@ function saveQTable(Qtable) {
     // Create download link and set attributes
     const downloadLink = document.createElement('a');
     downloadLink.href = URL.createObjectURL(blob);
-    downloadLink.download = 'qTable_dijkstra.json';
+    downloadLink.download = 'qTable_meow.json';
 
     // Append link, trigger download, then remove link
     document.body.appendChild(downloadLink);
@@ -1232,6 +1247,11 @@ function animate() {
       cat_action = Math.floor(Math.random() * 4)
     }
 
+    //we are in testing phase
+    if(TESTING) {
+      cat_action = getBestAction(cat_Qtable, cat_state_Index);
+    }
+
     if (cat_action === 0) {
       for (let i = 0; i < boundaries.length; i++) {
       const boundary = boundaries[i]
@@ -1462,29 +1482,91 @@ function animate() {
 
     //let the mouse perform optimal action
 
-    if(Math.random() > 0.20) {
-      //80% of the time the mouse will take the best action
-      action = getBestAction(Qtable, state_Index);
-    }
-    else {
-      //15% of the time the mouse will take the second best action
-      if(Math.random() > 0.25) {
-        action = getSecondBestAction(Qtable, state_Index)
+    if(!TESTING) {
+      if(epsilon > 0.6) {
+        //phase 0 is when epsilon is above 0.6
+        //random actions based on epsilon
+        if(Math.random() > epsilon) {
+          action = getBestAction(Qtable, state_Index);
+        }
+        else {
+          action = Math.floor(Math.random() * 4);
+        }
+      }
+      else if(epsilon > 0.4) {
+        //phase 1 is when epsilon is above 0.45
+        //80, 15, 5
+        if(Math.random() > 0.20) {
+          //80% of the time the mouse will take the best action
+          action = getBestAction(Qtable, state_Index);
+        }
+        else {
+          //15% of the time the mouse will take the second best action
+          //(0.2 * (1 - 0.25)) = 0.15
+          if(Math.random() > 0.25) {
+            action = getSecondBestAction(Qtable, state_Index)
+          }
+          else {
+            //5% of the time the mouse will take a random action
+            action = Math.floor(Math.random() * 4);
+          }   
+        }
+      }
+      else if(epsilon > 0.2) {
+        //phase 2 is when epsilon is above 0.25
+        //85, 10, 5
+        if(Math.random() > 0.15) {
+          //85% of the time the mouse will take the best action
+          action = getBestAction(Qtable, state_Index);
+        }
+        else {
+          //10% of the time the mouse will take the second best action
+          if(Math.random() > 0.33) {
+            action = getSecondBestAction(Qtable, state_Index)
+          }
+          else {
+            //5% of the time the mouse will take a random action
+            action = Math.floor(Math.random() * 4);
+          }  
+        }
       }
       else {
-        //5% of the time the mouse will take a random action
-        action = Math.floor(Math.random() * 4);
+        //phase 3 when epsilon is less than 0.2
+        //90, 7.5, 2.5
+        if(Math.random() > 0.1) {
+          //90% of the time the mouse will take the best action
+          action = getBestAction(Qtable, state_Index);
+        }
+        else {
+          //7.5% of the time the mouse will take the second best action
+          if(Math.random() > 0.25) {
+            action = getSecondBestAction(Qtable, state_Index)
+          }
+          else {
+            //2.5% of the time the mouse will take a random action
+            action = Math.floor(Math.random() * 4);
+          }  
+        }
       }
-      
     }
-
-    // if (TESTING && isOscillating(stateHistory, maxHistory)) {
-    //   console.log('The mouse is oscillating!');
-    //   // Implement logic to handle oscillation, such as choosing a different action.
-    //   //action = Math.floor(Math.random() * 4);
-    //   action = getSecondBestAction(Qtable, state_Index);
-    // }
-
+    else {
+      //THE TESTING PHASE IS TRAINED AGAINST THE ENHANCED MOUSE
+      //90, 5, 5
+      if(Math.random() > 0.1) {
+        //90% of the time the mouse will take the best action
+        action = getBestAction(Qtable, state_Index);
+      }
+      else {
+        //5% of the time the mouse will take the second best action
+        if(Math.random() > 0.5) {
+          action = getSecondBestAction(Qtable, state_Index)
+        }
+        else {
+          //5% of the time the mouse will take a random action
+          action = Math.floor(Math.random() * 4);
+        }  
+      }
+    }
     //-----------------------------------------------------------------------------
 
     if(check_escape(get_discrete_Y(player.position.y), get_discrete_X(player.position.x), action)) {
@@ -1711,15 +1793,7 @@ function animate() {
 
     let reward;
 
-    //--------rewards can be seperated into four categories----------
-    //Is cat or mouse closer to exit
-    //Change in distance from cat to mouse
-    //Change in distance from cat to exit
-    //Change in distance from mouse to exit
-
-
     new_cat_distance = myCats[0].rows.length;
-    //let cat_to_exit = newPathMatrix[get_discrete_Y(myCats[0].position.y)][get_discrete_X(myCats[0].position.x)];
     let is_updated_closer_to_exit = false;
     new_exit_distance = newPathMatrix[get_discrete_Y(player.position.y)][get_discrete_X(player.position.x)];
     new_cat_exit_distance = newPathMatrix[get_discrete_Y(myCats[0].position.y)][get_discrete_X(myCats[0].position.x)]; 
@@ -1814,9 +1888,6 @@ function animate() {
       //moouse to exit distance - cat to exit distance increased
       reward = -new_cat_distance;
     }
-    else {
-      console.log("reward is NULL what the fuck");
-    }
     if(show_rewards) {
       console.log(reward);
     }
@@ -1828,7 +1899,7 @@ function animate() {
     cat_row = get_discrete_Y(myCats[0].position.y);
     cat_col = get_discrete_X(myCats[0].position.x);
 
-    my_matrix = read_write_values(map)
+    my_matrix = read_write_values(map);
 
     fastestTimes(my_matrix, get_discrete_Y(myCats[0].position.y), get_discrete_X(myCats[0].position.x), get_discrete_Y(player.position.y), get_discrete_X(player.position.x), myCats[0].rows, myCats[0].col)
 
@@ -1844,33 +1915,136 @@ function animate() {
 
     let max_future_q = getBestAction(cat_Qtable, new_cat_stateIndex);
 
-    new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q);
+    if(!TESTING) {
+      new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q);
+    }
     
 
     if(restart) {
       new_q = 3 * max_distance;  //the mouse got caught
-      console.log("THE MOUSE WAS MIRACLOUSLY CAUGHT ------------------ BWAHAHAAHAHAH")
+      reward = 3 * max_distance;
+      //console.log("THE MOUSE WAS MIRACLOUSLY CAUGHT ------------------ BWAHAHAAHAHAH")
     }
     // updateStateHistory(stateHistory, state_Index, maxHistory);
 
-    cat_Qtable[cat_state_Index][cat_action] = new_q;
-    
-    // updateStateHistory(stateHistory, state_Index, maxHistory);
+    if(!TESTING) {
+      cat_Qtable[cat_state_Index][cat_action] = new_q;
+    }
+    if(show) {
+      console.log("our timeout rates are");
+      console.log(testing_timeout_rate);
+      console.log("our mouse caught rates are");
+      console.log(testing_mouse_caught_rate);
+      console.log("our mouse escape rates are");
+      console.log(testing_mouse_escape_rate);
+      
+      console.log("our timeout rewards are");
+      console.log(testing_timeout_rewards);
+      console.log("our mouse caught rewards are");
+      console.log(testing_mouse_caught_rewards);
+      console.log("our mouse escape rewards are");
+      console.log(testing_mouse_escape_rewards);
 
-    // if(!TESTING) {
-    //   //only update the Q table if we are NOT in testing phase
-    // timeout_iteration += 1
-    // if(TIMEOUT) {
-    //   //reset TIMEOUT;
-    //   TIMEOUT = false;
-    // }
-    // if(timeout_iteration > TIMEOUT_CUTOFF) {
-    //   console.log("WE TIMED OUT LOL")
-    //   timeout_iteration = 0;
-    //   TIMEOUT = true;
-    // }
+      console.log("current timeout rate is");
+      console.log(timeout_rate);
+      console.log("current escape rate is");
+      console.log(mouse_escape_rate);
+      console.log("current caught rate is");
+      console.log(mouse_caught_rate);
+      console.log("current timeout rewards is");
+      console.log(timeout_rewards);
+      console.log("current escape rewards is");
+      console.log(mouse_escape_rewards);
+      console.log("current caught rewards is");
+      console.log(mouse_caught_rewards);
+      show = false;
+    }
 
-    if(num_moves % 250 === 0 || restart2 || restart) {
+    //TESTING PHASE
+    if(TESTING && (num_moves % 150 === 0 || restart2 || restart)) {
+      if(num_moves % 150 === 0) {
+        //timed out
+        timeout_rate += 1; 
+        timeout_rewards += reward;
+      }
+      else if(restart2) {
+        //mouse escaped
+        mouse_escape_rate += 1;
+        mouse_escape_rewards += reward;
+      }
+      else if(restart) {
+        //mouse caught
+        mouse_caught_rate += 1;
+        mouse_caught_rewards += reward;
+      }
+      TESTING_EPISODES += 1;
+
+      myCats[0].rows = [];
+      myCats[0].col = [];
+      let positions = selectFreePositions(map);
+      player.future_row = -2;
+      player.future_col = -2;
+      //reset agent positions
+      player.position.y = get_continuous_X(positions.mousePosition.row) 
+      player.position.x = get_continuous_Y(positions.mousePosition.col)    
+      myCats[0].position.y = get_continuous_X(positions.catPosition.row) 
+      myCats[0].position.x = get_continuous_Y(positions.catPosition.col) 
+      num_moves = 1;
+
+      if(TESTING_EPISODES % 200 === 0) {
+        if(timeout_rate !== 0) {
+          timeout_rewards /= timeout_rate;
+        }
+        else {
+          timeout_rewards = 0;
+        }
+        if(mouse_caught_rate !== 0) {
+          mouse_caught_rewards /= mouse_caught_rate;
+        }
+        else {
+          mouse_caught_rewards = 0;
+        }
+        if(mouse_escape_rate !== 0){
+          mouse_escape_rewards /= mouse_escape_rate;
+        }
+        else {
+          mouse_escape_rewards = 0;
+        }
+
+        timeout_rate /= 200;
+        mouse_escape_rate /= 200;
+        mouse_caught_rate /= 200;
+
+
+
+        testing_timeout_rate.push(timeout_rate);
+        testing_mouse_caught_rate.push(mouse_caught_rate);
+        testing_mouse_escape_rate.push(mouse_escape_rate);
+        testing_timeout_rewards.push(timeout_rewards);
+        testing_mouse_caught_rewards.push(mouse_caught_rewards);
+        testing_mouse_escape_rewards.push(mouse_escape_rewards);
+
+        if(DOWNLOAD) {
+          createAndDownloadCSV(testing_timeout_rate, 'average_timeout_rate.csv');
+          createAndDownloadCSV(testing_mouse_caught_rate, 'average_caught_rate.csv');
+          createAndDownloadCSV(testing_mouse_escape_rate, 'average_escape_rate.csv');
+          createAndDownloadCSV(testing_timeout_rewards, 'average_timeout_rewards.csv');
+          createAndDownloadCSV(testing_mouse_caught_rewards, 'average_caught_rewards.csv');
+          createAndDownloadCSV(testing_mouse_escape_rewards, 'average_escape_rewards.csv');
+          saveQTable(cat_Qtable)
+          DOWNLOAD = false;
+        }
+        timeout_rate = 0;
+        mouse_caught_rate = 0;
+        mouse_escape_rate = 0;
+        timeout_rewards = 0;
+        mouse_caught_rewards = 0;
+        mouse_escape_rewards = 0;
+        TESTING = false;
+      }
+    }
+    //TRAINING PHASE
+    else if(!TESTING && (num_moves % 100 === 0 || restart2 || restart)) {
       restart2 = false;
       EPISODES += 1;
       epsilon *= EPS_DECAY
@@ -1885,11 +2059,26 @@ function animate() {
       myCats[0].position.y = get_continuous_X(positions.catPosition.row) 
       myCats[0].position.x = get_continuous_Y(positions.catPosition.col) 
       num_moves = 1;
+
+      if(DOWNLOAD) {
+          // createAndDownloadCSV(testing_timeout_rate, 'average_timeout_rate.csv');
+          // createAndDownloadCSV(testing_mouse_caught_rate, 'average_caught_rate.csv');
+          // createAndDownloadCSV(testing_mouse_escape_rate, 'average_escape_rate.csv');
+          // createAndDownloadCSV(testing_timeout_rewards, 'average_timeout_rewards.csv');
+          // createAndDownloadCSV(testing_mouse_caught_rewards, 'average_caught_rewards.csv');
+          // createAndDownloadCSV(testing_mouse_escape_rewards, 'average_escape_rewards.csv');
+          saveQTable(cat_Qtable)
+          DOWNLOAD = false;
+        }
+
+      if(EPISODES % 100 === 0) {
+        console.log(epsilon);
+        console.log("training episode");
+        console.log(EPISODES);
+        //console.log("switching to testing phase");
+        TESTING = true;
+      }
     }
-    
-
-
-
 }
 
 }
